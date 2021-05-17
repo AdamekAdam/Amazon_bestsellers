@@ -1,0 +1,439 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r}
+install.packages("ggplot2")
+install.packages("ggcorrplot")
+install.packages("ggpubr")
+install.packages("stringr")
+library(stringr)
+library(ggpubr)
+library(ggcorrplot)
+library(readr)
+library(ggplot2)
+
+AMAZONBESTSELLERS <- read_csv("bestsellers with categories.csv")
+AMAZONBESTSELLERS<-as.data.frame(AMAZONBESTSELLERS)
+na.omit(AMAZONBESTSELLERS)
+AMAZONBESTSELLERS
+unique(AMAZONBESTSELLERS$Name)
+unique(AMAZONBESTSELLERS$Author)
+AMAZONBESTSELLERS$Name[AMAZONBESTSELLERS$`Name`=="The 5 Love Languages: The Secret to Love That Lasts"]<-"The 5 Love Languages: The Secret to Love that Lasts"
+AMAZONBESTSELLERS$Author[AMAZONBESTSELLERS$`Author`=="J. K. Rowling"]<-"J.K. Rowling"
+unique(AMAZONBESTSELLERS$Author)
+unique(AMAZONBESTSELLERS$Name)
+```
+
+```{r}
+#A vizsgált időszak Fiction és Non Fiction műfajú könyvek aránya
+
+fiction<-length(AMAZONBESTSELLERS$Genre[AMAZONBESTSELLERS$Genre =="Fiction"])
+nonfiction<-length(AMAZONBESTSELLERS$Genre[AMAZONBESTSELLERS$Genre =="Non Fiction"])
+fiction
+nonfiction
+
+genre.ratio<-data.frame(Genre=c("Fiction","Non Fiction"), Count=c(fiction,nonfiction))
+genre.ratio
+
+genre.ratio$part = genre.ratio$Count / sum(genre.ratio$Count)
+genre.ratio$ymax = cumsum(genre.ratio$part)
+genre.ratio$ymin = c(0, head(genre.ratio$ymax, n=-1))
+ 
+genre<-ggplot(genre.ratio, aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=Genre)) +
+     geom_rect() +
+     coord_polar(theta="y")+  
+     xlim(c(2, 4))+
+  labs( x = NULL,
+       y = NULL,
+       title = "Genre ratio (2009-2019)")+
+      theme(axis.ticks = element_blank(),
+        axis.text = element_blank(),
+        axis.title = element_blank(),
+        panel.grid = element_blank(),
+        plot.title = element_text(hjust = 0.5),
+        legend.title = element_text(size = rel(1.5)),
+        legend.text=element_text(size=rel(1.0)))
+
+genre+
+  geom_label(
+    aes(label = paste(round(part * 100,0), "%"),
+    x = 3.5,
+    y = (ymin + ymax) / 2),
+    inherit.aes = TRUE,
+    show.legend = FALSE)
+
+```
+```{r}
+#Fiction és Non Fiction kategória aránya évenként
+
+subset.fiction<-AMAZONBESTSELLERS[AMAZONBESTSELLERS$Genre=="Fiction",]
+fiction.by.year<-aggregate(subset.fiction$Genre, by=list(Year = subset.fiction$Year), FUN = length )
+fiction.by.year$Genre<-rep("Fiction",11)
+names(fiction.by.year)[names(fiction.by.year) == "x"] <- "NumberOfFictions"
+fiction.by.year
+
+subset.nonfiction<-AMAZONBESTSELLERS[AMAZONBESTSELLERS$Genre=="Non Fiction",]
+nonfiction.by.year<-aggregate(subset.nonfiction$Genre, by=list(Year = subset.nonfiction$Year), FUN = length )
+nonfiction.by.year$Genre<-rep("Non Fiction",11)
+names(nonfiction.by.year)[names(nonfiction.by.year) == "x"] <- "NumberOfNonFictions"
+nonfiction.by.year
+
+year<-list(fiction.by.year$Year)
+year<-list(append(year,nonfiction.by.year$Year,length(year)))
+
+genre<-list(fiction.by.year$Genre)
+genre<-list(append(genre,nonfiction.by.year$Genre,length(genre)))
+
+numbers<-list(fiction.by.year$NumberOfFictions)
+numbers<-list(append(numbers,nonfiction.by.year$NumberOfNonFictions,length(numbers)))
+
+genre.by.year<-data.frame(Genre=unlist(genre),
+                          Year=unlist(year),
+                          Count=unlist(numbers))
+genre.by.year
+
+genre.by.year$Year<-as.factor(genre.by.year$Year)
+
+ggplot(genre.by.year, aes(x=Year, y=Count, group=Genre)) +
+  labs(title="Number of bestsellers by genre")+
+       theme(plot.title = element_text(hjust = 0.5),
+             legend.title = element_text(size = rel(1.2)))+
+  geom_line(aes(color=Genre))+
+  geom_point(aes(color=Genre))
+```
+
+```{r}
+#A besteller könyvek árainak eloszlása a teljes időszakban
+
+subset.fiction<-subset.fiction[subset.fiction$Price != 0,]
+price.fiction<-ggplot(subset.fiction, aes(x=Price))+
+  geom_histogram(color="black", fill="#F8766D",binwidth = 1.5)+
+  labs(title="Fiction genre prices", 
+         x="Price $", y = "Count")+
+  theme(plot.title = element_text(hjust = 0.5))
+
+price.fiction+geom_vline(aes(xintercept=mean(Price)),
+            color="black", linetype="dashed", size=1)
+
+
+subset.nonfiction<-subset.nonfiction[subset.nonfiction$Price != 0,]
+price.nonfiction<-ggplot(subset.nonfiction, aes(x=Price))+
+  geom_histogram(color="black", fill="#00BFC4",binwidth = 1.5)+
+  labs(title="Non fiction genre prices", 
+         x="Price $", y = "Count")+
+  theme(plot.title = element_text(hjust = 0.5))
+
+price.nonfiction+geom_vline(aes(xintercept=mean(Price)),
+            color="black", linetype="dashed", size=1)
+
+
+```
+
+```{r}
+#Bestsellerek átlagos árai a vizsgált időszakban évenként
+
+nonfiction.average.by.year<-aggregate(subset.nonfiction$Price, by=list(Year = subset.nonfiction$Year), FUN = mean )
+nonfiction.average.by.year$Genre<-rep("Non Fiction",11)
+names(nonfiction.average.by.year)[names(nonfiction.average.by.year) == "x"] <- "AveragePrice"
+nonfiction.average.by.year
+
+fiction.average.by.year<-aggregate(subset.fiction$Price, by=list(Year = subset.fiction$Year), FUN = mean )
+fiction.average.by.year$Genre<-rep("Fiction",11)
+names(fiction.average.by.year)[names(fiction.average.by.year) == "x"] <- "AveragePrice"
+fiction.average.by.year
+
+
+year<-list(fiction.average.by.year$Year)
+year<-list(append(year,nonfiction.average.by.year$Year,length(year)))
+
+genre<-list(fiction.average.by.year$Genre)
+genre<-list(append(genre,nonfiction.average.by.year$Genre,length(genre)))
+
+average<-list(fiction.average.by.year$AveragePrice)
+average<-list(append(average,nonfiction.average.by.year$AveragePrice,length(average)))
+
+
+average.price.by.year<-data.frame(Year=unlist(year),
+                                  Genre=unlist(genre),
+                          AveragePrice=unlist(average))
+
+average.price.by.year$Year<-as.factor(average.price.by.year$Year)
+average.price.by.year
+
+ggplot(average.price.by.year, aes(x=Year, y=AveragePrice, group=Genre)) +
+  labs(title="Average price of bestsellers",y="Average price")+
+       theme(plot.title = element_text(hjust = 0.5),
+             legend.title = element_text(size = rel(1.2)))+
+  geom_line(aes(color=Genre))+
+  geom_point(aes(color=Genre))
+```
+
+```{r}
+# 20 legsikeresebb szerzők  a bestsellerek darabszáma alapján
+
+fiction.author.by.number.of.bestseller<-as.data.frame(table(subset.fiction$Author))
+colnames(fiction.author.by.number.of.bestseller)<-c("Author","NumberOfBestsellers")
+fiction.author.by.number.of.bestseller<-fiction.author.by.number.of.bestseller[order(-fiction.author.by.number.of.bestseller$NumberOfBestsellers),]
+fiction.author.by.number.of.bestseller<-fiction.author.by.number.of.bestseller[1:15,]
+
+ggplot( fiction.author.by.number.of.bestseller,aes(x=reorder(Author,NumberOfBestsellers), y=NumberOfBestsellers)) +
+    geom_segment( aes(xend=Author, yend=0),color="#F8766D") +
+  scale_y_discrete(limits=c(0:11))+
+    geom_point( size=3, color="#F8766D") +
+    coord_flip() +
+    labs(title="Fiction authors by number of occurances on the list")+
+    theme(plot.title = element_text(hjust = 0.5))+
+    xlab("Author")+
+    ylab("Number of occurances")
+
+
+Non.fiction.author.by.number.of.bestseller<-as.data.frame(table(subset.nonfiction$Author))
+colnames(Non.fiction.author.by.number.of.bestseller)<-c("Author","NumberOfBestsellers")
+Non.fiction.author.by.number.of.bestseller<-Non.fiction.author.by.number.of.bestseller[order(-Non.fiction.author.by.number.of.bestseller$NumberOfBestsellers),]
+Non.fiction.author.by.number.of.bestseller<-Non.fiction.author.by.number.of.bestseller[1:15,]
+Non.fiction.author.by.number.of.bestseller$Author<-str_wrap(Non.fiction.author.by.number.of.bestseller$Author,25)
+
+ggplot( Non.fiction.author.by.number.of.bestseller,aes(x=reorder(Author,NumberOfBestsellers), y=NumberOfBestsellers)) +
+    geom_segment( aes(xend=Author, yend=0),color="#00BFC4") +
+  scale_y_discrete(limits=c(0:11))+
+    geom_point( size=3, color="#00BFC4") +
+    coord_flip() +
+    labs(title="Non fiction authors by number of occurances on the list")+
+    theme(plot.title = element_text(hjust = 0.5))+
+    xlab("Author")+
+  ylab("Number of occurances")
+ 
+```
+
+```{r}
+# A felhasználói értékelések hisztogrammja
+
+subset.fiction<-subset.fiction[subset.fiction$`User Rating` != 0,]
+
+price<-ggplot(subset.fiction, aes(x=subset.fiction$`User Rating`))+
+  geom_histogram(color="black", fill="#F8766D",binwidth = 0.5,stat = "count")+
+  labs(title="Fiction genre user ratings", 
+         x="User rating (1-5)", y = "Count")+
+  theme(plot.title = element_text(hjust = 0.5))+
+  scale_x_binned()
+
+price+geom_vline(aes(xintercept=mean(subset.fiction$`User Rating`)),
+            color="black", linetype="dashed", size=1)
+
+subset.nonfiction<-subset.nonfiction[subset.nonfiction$`User Rating` != 0,]
+
+price<-ggplot(subset.nonfiction, aes(x=subset.nonfiction$`User Rating`))+
+  geom_histogram(color="black", fill="#00BFC4",binwidth = 0.1,stat = "count")+
+  labs(title="Non fiction genre user ratings", 
+         x="User rating (1-5)", y = "Count")+
+  theme(plot.title = element_text(hjust = 0.5))+
+  scale_x_binned()
+
+price+geom_vline(aes(xintercept=mean(subset.nonfiction$`User Rating`)),
+            color="black", linetype="dashed", size=1)
+
+```
+
+
+
+```{r}
+# 20 legsikeresebb fiction szerző a felhasználi értékelések alapján
+
+author.by.user.ratings<-aggregate(subset.fiction$`User Rating`, by=list(Author=subset.fiction$Author), FUN = mean )
+author.by.user.ratings
+colnames(author.by.user.ratings)<-c("Author","UserRatings")
+author.by.user.ratings<-author.by.user.ratings[order(-author.by.user.ratings$UserRatings),]
+author.by.user.ratings<-author.by.user.ratings[1:15,]
+author.by.user.ratings
+ggplot( author.by.user.ratings,aes(x=reorder(Author,UserRatings), y=UserRatings,label=paste0(round(UserRatings, 2)))) +
+    geom_segment( aes(xend=Author, yend=0),color="#F8766D") +
+    geom_point( size=8, color="#F8766D") +
+    geom_text(color = "black", size = 3.2)+
+    coord_flip() +
+   labs(title="Fiction authors by user ratings average")+
+    theme(plot.title = element_text(hjust = 0.5))+
+    xlab("Author")+
+  ylab(" User Rating average")
+
+# 20 legsikeresebb Non fiction szerző a felhasználi értékelések alapján
+
+author.by.user.ratings<-aggregate(subset.nonfiction$`User Rating`, by=list(Author=subset.nonfiction$Author), FUN = mean )
+author.by.user.ratings
+colnames(author.by.user.ratings)<-c("Author","UserRatings")
+author.by.user.ratings<-author.by.user.ratings[order(-author.by.user.ratings$UserRatings),]
+author.by.user.ratings<-author.by.user.ratings[1:15,]
+author.by.user.ratings
+ggplot( author.by.user.ratings,aes(x=reorder(Author,UserRatings), y=UserRatings,label=paste0(round(UserRatings, 2)))) +
+    geom_segment( aes(xend=Author, yend=0),color="#00BFC4") +
+    geom_point( size=8, color="#00BFC4") +
+    geom_text(color = "black", size = 3.2)+
+    coord_flip() +
+    labs(title="Non fiction authors by user ratings average")+
+    theme(plot.title = element_text(hjust = 0.5))+
+    xlab("Author")+
+  ylab(" User Rating average")
+
+
+```
+
+```{r}
+#Korrelációk
+coloumns.fiction<-data.frame(UserRating=subset.fiction$`User Rating`,
+                        Reviews=subset.fiction$Reviews,
+                        Price=subset.fiction$Price)
+
+fiction.corr <- cor(coloumns.fiction)
+fiction.corr
+
+fic<-ggcorrplot(fiction.corr, hc.order = TRUE,
+   outline.col = "white",
+   ggtheme = ggplot2::theme_gray,
+   colors = c("#6D9EC1", "white", "#F8766D"),
+   lab = TRUE)
+
+
+coloumns.non.fiction<-data.frame(UserRating=subset.nonfiction$`User Rating`,
+                        Reviews=subset.nonfiction$Reviews,
+                        Price=subset.nonfiction$Price)
+
+non.fiction.corr <- cor(coloumns.non.fiction)
+non.fiction.corr
+
+nfic<-ggcorrplot(non.fiction.corr,
+           hc.order = TRUE,
+           outline.col = "white",
+           ggtheme = ggplot2::theme_gray,
+           colors = c("#6D9EC1", "white", "#00BFC4"),
+           lab = TRUE)
+
+
+ggarrange(fic, nfic, 
+          labels = c("Fiction", "Non Fiction"),
+          ncol = 2, nrow = 1)
+
+```
+
+
+```{r}
+# A legtöbbet értékelt könyvek
+
+unique.names.fiction<-subset.fiction[!duplicated(subset.fiction[1]),]
+
+most.reviewed.fiction.books<-data.frame(Name=unique.names.fiction$Name,
+                                        Reviews=unique.names.fiction$Reviews,
+                                        Genre=unique.names.fiction$Genre)
+most.reviewed.fiction.books<-most.reviewed.fiction.books[order(-most.reviewed.fiction.books$Reviews),]
+most.reviewed.fiction.books<-most.reviewed.fiction.books[1:10,]
+most.reviewed.fiction.books$Name<-sub("\\:.*", "", most.reviewed.fiction.books$Name)
+
+ggplot( most.reviewed.fiction.books,aes(x=reorder(Name,Reviews), y=Reviews,)) +
+    geom_segment( aes(xend=Name, yend=0),color="#F8766D") +
+    geom_point( size=3, color="#F8766D") +
+    scale_x_discrete(guide = guide_axis(angle = 45))+
+    labs(title="Fiction bestsellers by number of reviews")+
+    theme(plot.title = element_text(hjust = 0.5))+
+    xlab("Name of the book")+
+    ylab("Number of reviews")
+
+
+
+unique.names.nonfiction<-subset.nonfiction[!duplicated(subset.nonfiction[1]),]
+
+most.reviewed.nonfiction.books<-data.frame(Name=str_wrap(unique.names.nonfiction$Name,width = 43),
+                                Reviews=unique.names.nonfiction$Reviews,
+                                Genre=unique.names.nonfiction$Genre)
+most.reviewed.nonfiction.books<-most.reviewed.nonfiction.books[order(-most.reviewed.nonfiction.books$Reviews),]
+most.reviewed.nonfiction.books<-most.reviewed.nonfiction.books[1:10,]
+most.reviewed.nonfiction.books$Name<-sub("\\:.*", "", most.reviewed.nonfiction.books$Name)
+
+ggplot( most.reviewed.nonfiction.books,aes(x=reorder(Name,Reviews), y=Reviews,)) +
+    geom_segment( aes(xend=Name, yend=0),color="#00BFC4") +
+    geom_point( size=3, color="#00BFC4") +
+    scale_x_discrete(guide = guide_axis(angle = 45))+
+    labs(title="Non fiction bestsellers by number of reviews")+
+    theme(plot.title = element_text(hjust = 0.5))+
+    xlab("Name of the book")+
+    ylab("Number of reviews")
+
+
+
+```
+
+
+
+
+```{r}
+#Legtöbbször bestseller listára kerülő könyvek
+
+fiction.freq.title<-as.data.frame(table(subset.fiction$Name))
+
+colnames(fiction.freq.title)<-c("Name","Frequency")
+fiction.freq.title$Name<-sub("\\:.*", "", fiction.freq.title$Name)
+fiction.freq.title<-fiction.freq.title[order(-fiction.freq.title$Frequency),]
+fiction.freq.title<-fiction.freq.title[1:5,]
+fiction.freq.title$Genre<-rep("Fiction",each=5)
+fiction.freq.title
+
+
+nonfiction.freq.title<-as.data.frame(table(subset.nonfiction$Name))
+colnames(nonfiction.freq.title)<-c("Name","Frequency")
+nonfiction.freq.title$Name<-sub("\\:.*", "", nonfiction.freq.title$Name)
+nonfiction.freq.title<-nonfiction.freq.title[order(-nonfiction.freq.title$Frequency),]
+nonfiction.freq.title<-nonfiction.freq.title[1:5,]
+nonfiction.freq.title$Genre<-rep("Non Fiction",each=5)
+nonfiction.freq.title
+
+
+bestseller.genre<-list(fiction.freq.title$Genre)
+bestseller.genre<-list(append(bestseller.genre,nonfiction.freq.title$Genre,length(bestseller.genre)))
+
+bestseller.name<-list(fiction.freq.title$Name)
+bestseller.name<-list(append(bestseller.name,nonfiction.freq.title$Name,length(bestseller.name)))
+
+bestseller.frequency<-list(fiction.freq.title$Frequency)
+bestseller.frequency<-list(append(bestseller.frequency,nonfiction.freq.title$Frequency,length(bestseller.frequency)))
+
+
+all.genre.frequeny<-data.frame(Name=unlist(bestseller.name),
+                          Frequency=unlist(bestseller.frequency),
+                          Genre=unlist(bestseller.genre))
+all.genre.frequeny
+all.genre.frequeny$Name<-str_wrap(all.genre.frequeny$Name,width = 35)
+
+
+ggplot(data=all.genre.frequeny, aes(x=reorder(Name,Frequency), y=Frequency, fill=Genre)) +
+  geom_bar(stat="identity", position=position_dodge(),binwidth = 0.1)+
+  scale_fill_manual(values=c("#F8766D","#00BFC4"))+
+  labs(title="Books by number of occurances on bestsellers list", 
+         x="", y = "Number of occurances")+
+  coord_flip() +
+  theme(plot.title = element_text(hjust = 0.5))+
+  xlab("Bestseller")
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
